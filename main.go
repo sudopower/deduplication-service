@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"crypto/sha256"
 	"flag"
 	"fmt"
+	"hash"
 	"io"
 	"log"
 	"os"
@@ -25,6 +27,8 @@ type Deduplicator struct {
 	// seen stores the last time a key was observed.
 	// The key is of type interface{} to handle various types (numbers, strings).
 	seen map[interface{}]time.Time
+
+	hasher hash.Hash
 }
 
 // NewDeduplicator creates and initializes a new Deduplicator instance.
@@ -33,6 +37,7 @@ func NewDeduplicator(period time.Duration) *Deduplicator {
 	d := &Deduplicator{
 		period: period,
 		seen:   make(map[interface{}]time.Time),
+		hasher: sha256.New(),
 	}
 
 	// If a period is set, we need to periodically clean up old entries
@@ -57,10 +62,14 @@ func (d *Deduplicator) ProcessMessages(writer io.Writer, reader io.Reader) {
 		}
 
 		// Check if the key is a duplicate.
-		if !d.isDuplicate(string(lineBytes)) {
+		d.hasher.Reset()
+		d.hasher.Write(lineBytes)
+		key := d.hasher.Sum(nil)
+		if !d.isDuplicate(string(key)) {
 			// If not a duplicate, write the original message to the output.
 			fmt.Fprintln(writer, string(lineBytes))
 		}
+
 	}
 
 	if err := scanner.Err(); err != nil {
